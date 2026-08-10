@@ -163,11 +163,30 @@
     <button class="tab" role="tab" data-tab="payments" aria-selected="false">Payments</button>
     <button class="tab" role="tab" data-tab="monthly" aria-selected="false">Monthly Interest</button>
     <button class="tab" role="tab" data-tab="rates" aria-selected="false">Interest Rates</button>
-    <button class="tab" role="tab" data-tab="payoff" aria-selected="false">Payoff Calculator</button>
   </div>
 
   <div class="panel active" id="p-all">
-    <div class="panel-head"><h2>All Activity</h2><div class="meta" id="m-all"></div></div>
+    <div class="panel-head"><h2>Payoff Calculator</h2><div class="meta">Assumes the current <b>6.75%</b> rate holds steady</div></div>
+
+    <div class="payoff-controls">
+      <label for="payoff-amount">Monthly payment</label>
+      <div class="payoff-input-row">
+        <div class="payoff-input-wrap">
+          <span class="payoff-dollar">$</span>
+          <input type="number" id="payoff-amount" min="1" step="25" value="500">
+        </div>
+        <div class="payoff-presets" id="payoff-presets"></div>
+      </div>
+    </div>
+
+    <div id="payoff-warning" class="payoff-warning" style="display:none"></div>
+    <div class="grid payoff-stats" id="payoff-stats"></div>
+
+    <div class="chart-card">
+      <svg id="payoff-chart" viewBox="0 0 860 320" preserveAspectRatio="none"></svg>
+    </div>
+
+    <div class="panel-head" style="margin-top:40px"><h2>All Activity</h2><div class="meta" id="m-all"></div></div>
     <table><thead><tr>
       <th>Date</th><th>Type</th><th>Amount</th><th>Rate</th><th>Interest since prior</th><th>Balance</th>
     </tr></thead><tbody id="rows-all"></tbody></table>
@@ -197,28 +216,6 @@
   <div class="panel" id="p-rates">
     <div class="panel-head"><h2>Rate Periods</h2><div class="meta">Applied to the balance during each span</div></div>
     <div class="rate-list" id="rows-rates"></div>
-  </div>
-
-  <div class="panel" id="p-payoff">
-    <div class="panel-head"><h2>Payoff Calculator</h2><div class="meta">Assumes the current <b>6.75%</b> rate holds steady</div></div>
-
-    <div class="payoff-controls">
-      <label for="payoff-amount">Monthly payment</label>
-      <div class="payoff-input-row">
-        <div class="payoff-input-wrap">
-          <span class="payoff-dollar">$</span>
-          <input type="number" id="payoff-amount" min="1" step="25" value="500">
-        </div>
-        <div class="payoff-presets" id="payoff-presets"></div>
-      </div>
-    </div>
-
-    <div id="payoff-warning" class="payoff-warning" style="display:none"></div>
-    <div class="grid payoff-stats" id="payoff-stats"></div>
-
-    <div class="chart-card">
-      <svg id="payoff-chart" viewBox="0 0 860 320" preserveAspectRatio="none"></svg>
-    </div>
   </div>
 
   <div class="note">
@@ -407,7 +404,7 @@ document.getElementById('payoff-amount').addEventListener('input', renderPayoff)
 renderPayoff();
 
 const tabs=[...document.querySelectorAll('.tab')];
-const panels={all:'p-all',loans:'p-loans',payments:'p-payments',monthly:'p-monthly',rates:'p-rates',payoff:'p-payoff'};
+const panels={all:'p-all',loans:'p-loans',payments:'p-payments',monthly:'p-monthly',rates:'p-rates'};
 tabs.forEach(t=>t.addEventListener('click',()=>{
   tabs.forEach(x=>x.setAttribute('aria-selected','false'));
   t.setAttribute('aria-selected','true');
