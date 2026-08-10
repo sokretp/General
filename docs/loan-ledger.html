@@ -94,6 +94,33 @@
   .note b{color:var(--ink)}
   a{color:var(--owed);text-decoration:none;border-bottom:1px solid var(--owed-soft)}
 
+  .payoff-controls{background:var(--card);border:1px solid var(--line);padding:22px 24px;margin-bottom:14px}
+  .payoff-controls label{font-family:ui-monospace,monospace;font-size:10.5px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--muted);display:block;margin-bottom:10px}
+  .payoff-input-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .payoff-input-wrap{display:flex;align-items:center;border:1.5px solid var(--ink);background:var(--paper)}
+  .payoff-dollar{padding-left:14px;font-size:20px;color:var(--muted)}
+  #payoff-amount{border:none;background:transparent;font:inherit;font-size:22px;font-weight:600;
+    padding:10px 14px 10px 6px;width:150px;color:var(--ink);font-variant-numeric:tabular-nums}
+  #payoff-amount:focus{outline:none}
+  .payoff-presets{display:flex;gap:8px;flex-wrap:wrap}
+  .preset-btn{font-family:ui-monospace,monospace;font-size:12px;letter-spacing:.04em;
+    padding:8px 14px;border:1px solid var(--line);background:var(--card);color:var(--muted);
+    cursor:pointer;transition:all .15s}
+  .preset-btn:hover{border-color:var(--owed);color:var(--owed)}
+  .preset-btn.active{background:var(--owed);border-color:var(--owed);color:#fff}
+
+  .payoff-stats{margin-bottom:14px}
+  .payoff-warning{background:#f2e4df;border:1px solid var(--owed-soft);color:var(--owed);
+    padding:16px 20px;font-size:13.5px;margin-bottom:14px;line-height:1.6}
+
+  .chart-card{background:var(--card);border:1px solid var(--line);padding:20px 24px 12px}
+  #payoff-chart{width:100%;height:auto;display:block}
+  .chart-grid-line{stroke:var(--line2);stroke-width:1}
+  .chart-axis-label{font-family:ui-monospace,monospace;font-size:10px;fill:var(--muted)}
+  .chart-area{fill:var(--owed);fill-opacity:.08}
+  .chart-line{fill:none;stroke:var(--owed);stroke-width:2}
+
   @media(max-width:680px){
     .grid{grid-template-columns:1fr}
     .hero .big{font-size:42px}
@@ -105,6 +132,8 @@
     .rate-row{grid-template-columns:80px 1fr;gap:10px}
     .rate-src{grid-column:1/-1}
     .bar{display:none}
+    .payoff-input-wrap{width:100%}
+    #payoff-amount{width:100%}
   }
 </style>
 </head>
@@ -134,6 +163,7 @@
     <button class="tab" role="tab" data-tab="payments" aria-selected="false">Payments</button>
     <button class="tab" role="tab" data-tab="monthly" aria-selected="false">Monthly Interest</button>
     <button class="tab" role="tab" data-tab="rates" aria-selected="false">Interest Rates</button>
+    <button class="tab" role="tab" data-tab="payoff" aria-selected="false">Payoff Calculator</button>
   </div>
 
   <div class="panel active" id="p-all">
@@ -167,6 +197,28 @@
   <div class="panel" id="p-rates">
     <div class="panel-head"><h2>Rate Periods</h2><div class="meta">Applied to the balance during each span</div></div>
     <div class="rate-list" id="rows-rates"></div>
+  </div>
+
+  <div class="panel" id="p-payoff">
+    <div class="panel-head"><h2>Payoff Calculator</h2><div class="meta">Assumes the current <b>6.75%</b> rate holds steady</div></div>
+
+    <div class="payoff-controls">
+      <label for="payoff-amount">Monthly payment</label>
+      <div class="payoff-input-row">
+        <div class="payoff-input-wrap">
+          <span class="payoff-dollar">$</span>
+          <input type="number" id="payoff-amount" min="1" step="25" value="500">
+        </div>
+        <div class="payoff-presets" id="payoff-presets"></div>
+      </div>
+    </div>
+
+    <div id="payoff-warning" class="payoff-warning" style="display:none"></div>
+    <div class="grid payoff-stats" id="payoff-stats"></div>
+
+    <div class="chart-card">
+      <svg id="payoff-chart" viewBox="0 0 860 320" preserveAspectRatio="none"></svg>
+    </div>
   </div>
 
   <div class="note">
@@ -251,8 +303,111 @@ document.getElementById('rows-rates').innerHTML = DATA.periods.map(p=>{
     ${src}</div>`;
 }).join('');
 
+function simulatePayoff(monthlyPayment, startBalance, annualRate, startDateStr){
+  const dailyRate = annualRate/365;
+  const [sy,sm,sd] = startDateStr.split('-').map(Number);
+  let balance = startBalance;
+  let date = new Date(sy, sm-1, sd);
+  const schedule = [{months:0, date:new Date(date), balance:balance}];
+  let months = 0, totalInterest = 0;
+  const maxMonths = 600;
+  while(balance > 0.005 && months < maxMonths){
+    const next = new Date(date);
+    next.setMonth(next.getMonth()+1);
+    const days = Math.round((next-date)/86400000);
+    const interest = balance*(Math.pow(1+dailyRate,days)-1);
+    let bal = balance+interest;
+    bal -= Math.min(monthlyPayment, bal);
+    totalInterest += interest;
+    months++;
+    date = next;
+    balance = bal;
+    schedule.push({months, date:new Date(date), balance:Math.max(balance,0)});
+  }
+  return {months, schedule, payoffDate:date, totalInterest,
+    neverPaysOff: months>=maxMonths && balance>0.005};
+}
+
+function renderPayoffChart(schedule, startBalance){
+  const svg = document.getElementById('payoff-chart');
+  const W=860,H=320,padL=64,padR=20,padT=20,padB=36;
+  const innerW=W-padL-padR, innerH=H-padT-padB;
+  const n = schedule.length;
+  const maxBal = Math.max(startBalance, ...schedule.map(p=>p.balance));
+  const x = i => padL + (n>1 ? innerW*i/(n-1) : 0);
+  const y = v => padT + innerH*(1 - v/maxBal);
+
+  let path = `M ${x(0)} ${y(schedule[0].balance)}`;
+  schedule.forEach((p,i)=>{ if(i>0) path += ` L ${x(i)} ${y(p.balance)}`; });
+  const area = path + ` L ${x(n-1)} ${y(0)} L ${x(0)} ${y(0)} Z`;
+
+  let grid='';
+  for(let s=0;s<=4;s++){
+    const v = maxBal*s/4;
+    const yy = y(v);
+    grid += `<line class="chart-grid-line" x1="${padL}" y1="${yy}" x2="${W-padR}" y2="${yy}"/>`;
+    grid += `<text class="chart-axis-label" x="${padL-8}" y="${yy+4}" text-anchor="end">$${Math.round(v/1000)}k</text>`;
+  }
+  let xlabels='';
+  const labelCount = Math.min(6, n-1);
+  for(let i=0;i<=labelCount;i++){
+    const idx = Math.round((n-1)*i/labelCount);
+    const p = schedule[idx];
+    const label = p.months===0 ? 'Now' : p.date.toLocaleDateString('en-US',{month:'short',year:'2-digit'});
+    xlabels += `<text class="chart-axis-label" x="${x(idx)}" y="${H-padB+18}" text-anchor="middle">${label}</text>`;
+  }
+  svg.innerHTML = `${grid}<path class="chart-area" d="${area}"/><path class="chart-line" d="${path}"/>${xlabels}`;
+}
+
+const PAYOFF_PRESETS = [300, 500, 750, 1000, 1500];
+document.getElementById('payoff-presets').innerHTML = PAYOFF_PRESETS.map(p=>
+  `<button type="button" class="preset-btn" data-amt="${p}">$${p}/mo</button>`).join('');
+
+function renderPayoff(){
+  const input = document.getElementById('payoff-amount');
+  const amount = Math.max(1, Number(input.value)||0);
+  document.querySelectorAll('.preset-btn').forEach(b=>
+    b.classList.toggle('active', Number(b.dataset.amt)===amount));
+
+  const annualRate = DATA.periods[DATA.periods.length-1].rate;
+  const result = simulatePayoff(amount, DATA.balance, annualRate, DATA.asOf);
+  const warningEl = document.getElementById('payoff-warning');
+  const statsEl = document.getElementById('payoff-stats');
+
+  if(result.neverPaysOff){
+    const firstMonthInterest = DATA.balance*(Math.pow(1+annualRate/365,30)-1);
+    warningEl.style.display='block';
+    warningEl.innerHTML = `At ${money(amount)}/month, this doesn't outpace interest — roughly
+      ${money(firstMonthInterest)} accrues in the first month alone, so the balance will grow
+      instead of shrinking. Try a higher payment.`;
+    statsEl.innerHTML = '';
+    renderPayoffChart(result.schedule, DATA.balance);
+    return;
+  }
+  warningEl.style.display='none';
+
+  const years = Math.floor(result.months/12);
+  const remMonths = result.months%12;
+  const durationStr = years>0 ? `${years}y ${remMonths}mo` : `${remMonths} mo`;
+
+  statsEl.innerHTML = `
+    <div class="stat"><div class="lab">Time to Pay Off</div><div class="val">${durationStr}</div></div>
+    <div class="stat"><div class="lab">Payoff Date</div><div class="val">${result.payoffDate.toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'})}</div></div>
+    <div class="stat int"><div class="lab">Interest Along the Way</div><div class="val">${money(result.totalInterest)}</div></div>`;
+
+  renderPayoffChart(result.schedule, DATA.balance);
+}
+document.getElementById('payoff-presets').addEventListener('click', e=>{
+  const btn = e.target.closest('.preset-btn');
+  if(!btn) return;
+  document.getElementById('payoff-amount').value = btn.dataset.amt;
+  renderPayoff();
+});
+document.getElementById('payoff-amount').addEventListener('input', renderPayoff);
+renderPayoff();
+
 const tabs=[...document.querySelectorAll('.tab')];
-const panels={all:'p-all',loans:'p-loans',payments:'p-payments',monthly:'p-monthly',rates:'p-rates'};
+const panels={all:'p-all',loans:'p-loans',payments:'p-payments',monthly:'p-monthly',rates:'p-rates',payoff:'p-payoff'};
 tabs.forEach(t=>t.addEventListener('click',()=>{
   tabs.forEach(x=>x.setAttribute('aria-selected','false'));
   t.setAttribute('aria-selected','true');
