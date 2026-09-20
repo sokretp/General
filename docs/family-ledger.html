@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Family ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1c2420;
+    --muted: #5f6b64;
+    --faint: #93a098;
+    --paper: #fbfaf7;
+    --card: #ffffff;
+    --line: #e3e2db;
+    --green: #1d6b4f;
+    --green-soft: #e7f2ec;
+    --amber: #8a5a12;
+    --amber-soft: #f8eed9;
+    --red: #9c3030;
+    --red-soft: #f9e9e9;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    padding: 2.5rem 1.25rem 4rem;
+  }
+  .wrap { max-width: 700px; margin: 0 auto; }
+  h1 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 30px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .sub { color: var(--muted); font-size: 14px; margin-top: 4px; }
+  .topbar { margin-bottom: 1.75rem; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 2rem; }
+  .stat {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 1rem 1.15rem;
+  }
+  .stat .label { font-size: 12.5px; color: var(--muted); margin-bottom: 2px; }
+  .stat .value { font-family: 'Fraunces', Georgia, serif; font-size: 26px; font-weight: 600; }
+  .stat .hint { font-size: 12px; color: var(--faint); margin-top: 2px; }
+
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 10px; }
+  .section-head h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+
+  .ledger { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin-bottom: 2rem; }
+  .row { padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: none; }
+  .row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .row .name { font-weight: 500; }
+  .row .note { font-size: 13px; color: var(--muted); }
+  .row .amts { font-size: 14px; white-space: nowrap; }
+  .row .remaining { font-weight: 600; }
+  .row .orig { color: var(--faint); font-size: 13px; margin-left: 6px; }
+  .paid-tag { color: var(--green); font-weight: 600; font-size: 13px; }
+  .bar { height: 5px; background: var(--green-soft); border-radius: 3px; margin-top: 9px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--green); border-radius: 3px; }
+  .pay-amt { color: var(--green); font-weight: 600; }
+  .empty { padding: 16px 18px; color: var(--faint); font-size: 13.5px; }
+
+  .bond {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 1.15rem 1.25rem;
+    margin-bottom: 2rem;
+  }
+  .bond-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .bond h3 { font-size: 16px; font-weight: 600; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 500; padding: 3px 11px; border-radius: 999px; margin: 8px 8px 0 0; }
+  .pill.amber { background: var(--amber-soft); color: var(--amber); }
+  .pill.green { background: var(--green-soft); color: var(--green); }
+  .pill.red { background: var(--red-soft); color: var(--red); }
+  .bond p { font-size: 13.5px; color: var(--muted); margin-top: 10px; }
+
+  .footer { font-size: 12.5px; color: var(--faint); text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="topbar">
+    <h1>Family ledger</h1>
+    <div class="sub" id="updated"></div>
+  </div>
+
+  <div class="cards">
+    <div class="stat">
+      <div class="label">What you still owe</div>
+      <div class="value num" id="statRemaining">—</div>
+      <div class="hint num" id="statOrig"></div>
+    </div>
+    <div class="stat">
+      <div class="label">You've paid</div>
+      <div class="value num" id="statPaid">—</div>
+      <div class="hint" id="statPct"></div>
+    </div>
+    <div class="stat">
+      <div class="label">Court bond</div>
+      <div class="value num" id="statBond">—</div>
+      <div class="hint" id="statBondHint"></div>
+    </div>
+  </div>
+
+  <div class="section-head"><h2>Debts</h2></div>
+  <div class="ledger">
+    <div id="rows"></div>
+  </div>
+
+  <div class="section-head"><h2>Payments</h2></div>
+  <div class="ledger">
+    <div id="paymentRows"></div>
+  </div>
+
+  <div class="section-head"><h2>Security deposit</h2></div>
+  <div class="bond">
+    <div class="bond-top">
+      <h3>Deposit — held on your place</h3>
+      <span class="num" style="font-family:'Fraunces',Georgia,serif;font-size:22px;font-weight:600;" id="depositAmt"></span>
+    </div>
+    <div><span class="pill green">Your credit</span><span class="pill amber">Held while you live there</span></div>
+    <p>This is your money and it stays in your column — but it's the security deposit on the place you're living in, so it can't come off the balance above. You get it back when you move out and everything's squared up.</p>
+  </div>
+
+  <div class="section-head"><h2>Court bond</h2></div>
+  <div class="bond">
+    <div class="bond-top">
+      <h3>Bond — held against your court appearances</h3>
+      <span class="num" style="font-family:'Fraunces',Georgia,serif;font-size:22px;font-weight:600;" id="bondAmt"></span>
+    </div>
+    <div id="bondPills"></div>
+    <p id="bondText"></p>
+  </div>
+
+  <div class="footer">Tell Sokret if a payment is missing or something here looks off.</div>
+</div>
+
+<script>
+const DATA = {
+  updatedAt: '2026-09-20',
+  items: [
+    { name: 'Rent — March', amount: 675 },
+    { name: 'Rent — April', amount: 675 },
+    { name: 'Rent — May', amount: 675 },
+    { name: 'Rent — June', amount: 675 },
+    { name: 'Rent — July', amount: 675 },
+    { name: 'Rent — August', amount: 675 },
+    { name: 'Rent — September', amount: 675 },
+    { name: 'Attorney costs', note: 'Sokret owes Mom & Dad $4k for this', amount: 4000 },
+    { name: 'Short-term loan', amount: 500 },
+    { name: 'Necklace redemption', note: 'Pay this and the gold necklace comes back to you', amount: 200 }
+  ],
+  payments: [
+    { date: '2026-09-11', amount: 300 }
+  ],
+  deposit: { amount: 600 },
+  bond: { amount: 8500, fees: 200, status: 'shortfall' }
+};
+
+const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2, minimumFractionDigits: 0 });
+const money = (n) => fmt.format(Math.round(n * 100) / 100);
+
+const fmtDate = (s) => { const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); };
+
+function totals() {
+  const orig = DATA.items.reduce((s, i) => s + i.amount, 0);
+  const paid = DATA.payments.reduce((s, p) => s + p.amount, 0);
+  return { orig, paid, remaining: Math.max(orig - paid, 0) };
+}
+
+// Payments apply oldest-debt-first, in the order items are listed.
+function allocate() {
+  let left = DATA.payments.reduce((s, p) => s + p.amount, 0);
+  return DATA.items.map((item) => {
+    const applied = Math.min(left, item.amount);
+    left -= applied;
+    return { ...item, paid: applied };
+  });
+}
+
+function bondInfo() {
+  const b = DATA.bond;
+  const map = {
+    pending: { pill: ['amber', 'Case ongoing'], hint: 'held by the court',
+      text: 'Secured by the gold necklace. If you make every hearing, the bond comes back minus court fees. Miss one and it’s forfeited — the necklace covers the loss.' },
+    refund: { pill: ['green', 'Refund due'], hint: 'refund expected: ' + money(Math.max(b.amount - b.fees, 0)),
+      text: 'You made every hearing. ' + money(Math.max(b.amount - b.fees, 0)) + ' is coming back after ' + money(b.fees) + ' in court fees, and the necklace goes back to you.' },
+    returned: { pill: ['green', 'Returned'], hint: 'settled',
+      text: 'Bond returned (' + money(Math.max(b.amount - b.fees, 0)) + ' after ' + money(b.fees) + ' in court fees). Nothing left owing here.' },
+    shortfall: { pill: ['amber', 'Necklace held — ' + money(b.fees) + ' due'], hint: money(b.fees) + ' due to get the necklace back',
+      text: 'The court repaid ' + money(Math.max(b.amount - b.fees, 0)) + ' of the ' + money(b.amount) + ' bond and kept ' + money(b.fees) + ' in fees. The gold necklace stays held until you cover that ' + money(b.fees) + ' — pay it and the necklace is yours again.' },
+    forfeited: { pill: ['red', 'Forfeited'], hint: 'covered by collateral',
+      text: 'The bond was forfeited. The gold necklace held as collateral covers the loss.' }
+  };
+  return map[b.status] || map.pending;
+}
+
+function render() {
+  const t = totals();
+  document.getElementById('statRemaining').textContent = money(t.remaining);
+  document.getElementById('statOrig').textContent = t.paid > 0 ? 'of ' + money(t.orig) + ' total' : money(t.orig) + ' total';
+  document.getElementById('statPaid').textContent = money(t.paid);
+  document.getElementById('statPct').textContent = t.orig ? Math.round(t.paid / t.orig * 100) + '% paid off' : '';
+  document.getElementById('depositAmt').textContent = money(DATA.deposit.amount);
+  document.getElementById('statBond').textContent = money(DATA.bond.amount);
+  const bi = bondInfo();
+  document.getElementById('statBondHint').textContent = bi.hint;
+  document.getElementById('bondAmt').textContent = money(DATA.bond.amount);
+  document.getElementById('bondPills').innerHTML =
+    '<span class="pill ' + bi.pill[0] + '">' + bi.pill[1] + '</span>' +
+    '<span class="pill amber">Secured by gold necklace</span>';
+  document.getElementById('bondText').textContent = bi.text;
+  const [uy, um, ud] = DATA.updatedAt.split('-').map(Number);
+  document.getElementById('updated').textContent = 'Updated '
+    + new Date(uy, um - 1, ud).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+  const rows = document.getElementById('rows');
+  rows.innerHTML = '';
+  allocate().forEach((item) => {
+    const remaining = Math.max(item.amount - item.paid, 0);
+    const pct = item.amount ? Math.min(item.paid / item.amount * 100, 100) : 0;
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML =
+      '<div class="row-top">' +
+        '<div><span class="name"></span><div class="note"></div></div>' +
+        '<div class="amts num">' + (remaining <= 0
+          ? '<span class="paid-tag">Paid in full</span><span class="orig">' + money(item.amount) + '</span>'
+          : '<span class="remaining">' + money(remaining) + '</span><span class="orig">of ' + money(item.amount) + '</span>') +
+        '</div>' +
+      '</div>' +
+      (item.paid > 0 && remaining > 0 ? '<div class="bar"><div style="width:' + pct + '%"></div></div>' : '');
+    row.querySelector('.name').textContent = item.name;
+    row.querySelector('.note').textContent = item.note || '';
+    rows.appendChild(row);
+  });
+
+  const paymentRows = document.getElementById('paymentRows');
+  paymentRows.innerHTML = '';
+  if (DATA.payments.length === 0) {
+    paymentRows.innerHTML = '<div class="empty">No payments logged yet.</div>';
+  } else {
+    [...DATA.payments].reverse().forEach((p) => {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML =
+        '<div class="row-top">' +
+          '<div class="name"></div>' +
+          '<div class="amts num pay-amt"></div>' +
+        '</div>';
+      row.querySelector('.name').textContent = fmtDate(p.date);
+      row.querySelector('.pay-amt').textContent = '+' + money(p.amount);
+      paymentRows.appendChild(row);
+    });
+  }
+}
+
+render();
+</script>
+</body>
+</html>
