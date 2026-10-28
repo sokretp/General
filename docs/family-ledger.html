@@ -150,7 +150,7 @@
 
 <script>
 const DATA = {
-  updatedAt: '2026-10-06',
+  updatedAt: '2026-10-27',
   items: [
     { name: 'Rent — March', amount: 675 },
     { name: 'Rent — April', amount: 675 },
@@ -166,7 +166,9 @@ const DATA = {
     { name: 'Amazon purchase', amount: 19.21 }
   ],
   payments: [
-    { date: '2026-09-11', amount: 300 }
+    { date: '2026-09-11', amount: 300 },
+    { date: '2026-10-09', amount: 19.21, appliesTo: 'Amazon purchase' },
+    { date: '2026-10-09', amount: 300 }
   ],
   deposit: { amount: 600 },
   bond: { amount: 8500, fees: 200, status: 'shortfall' }
@@ -184,13 +186,20 @@ function totals() {
   return { orig, paid, remaining: Math.max(orig - paid, 0) };
 }
 
-// Payments apply oldest-debt-first, in the order items are listed.
+// A payment with appliesTo goes against that debt by name; everything else
+// pays down the oldest debt first, in the order items are listed.
 function allocate() {
-  let left = DATA.payments.reduce((s, p) => s + p.amount, 0);
+  const earmarked = {};
+  let pool = 0;
+  DATA.payments.forEach((p) => {
+    if (p.appliesTo) earmarked[p.appliesTo] = (earmarked[p.appliesTo] || 0) + p.amount;
+    else pool += p.amount;
+  });
   return DATA.items.map((item) => {
-    const applied = Math.min(left, item.amount);
-    left -= applied;
-    return { ...item, paid: applied };
+    const direct = Math.min(earmarked[item.name] || 0, item.amount);
+    const fromPool = Math.min(pool, item.amount - direct);
+    pool -= fromPool;
+    return { ...item, paid: direct + fromPool };
   });
 }
 
@@ -261,10 +270,11 @@ function render() {
       row.className = 'row';
       row.innerHTML =
         '<div class="row-top">' +
-          '<div class="name"></div>' +
+          '<div><span class="name"></span><div class="note"></div></div>' +
           '<div class="amts num pay-amt"></div>' +
         '</div>';
       row.querySelector('.name').textContent = fmtDate(p.date);
+      row.querySelector('.note').textContent = p.appliesTo ? 'Toward ' + p.appliesTo : '';
       row.querySelector('.pay-amt').textContent = '+' + money(p.amount);
       paymentRows.appendChild(row);
     });
